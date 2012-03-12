@@ -19,11 +19,9 @@ import scala.collection.immutable.{ HashMap }
 
 object Phonebook extends App {
 
-  type Name = String
+  import PhonebookData._
 
-  type Information = String
-
-  type Storage = (Int, Map[Name, Information])
+  type Storage = (Int, Map[String, String])
 
   type Failure = String
 
@@ -33,12 +31,7 @@ object Phonebook extends App {
   // We want some error handling
   type PhonebookT[A] = EitherT[PhonebookState, Failure, A]
 
-  sealed abstract class Command
-  case class Add(name: String, info: Information) extends Command
-  case class Remove(name: String) extends Command
-  case class Lookup(name: String) extends Command
-
-  def executeCommand(cmd: Command): PhonebookT[Information] = liftStateTtoEitherT(cmd match {
+  def executeCommand(cmd: Command): PhonebookT[String] = liftStateTtoEitherT(cmd match {
 
     case Lookup(name) => for {
         s         <- tick()
@@ -68,7 +61,7 @@ object Phonebook extends App {
 
   })
 
-  def bulkExecute(cmds: List[Command]): PhonebookT[Information] = cmds match {
+  def bulkExecute(cmds: List[Command]): PhonebookT[String] = cmds match {
     case Nil => liftStateTtoEitherT(for {
       s        <- init[Storage]
       (cnt, _) = s
@@ -87,7 +80,7 @@ object Phonebook extends App {
   def liftStateTtoEitherT[A](st: PhonebookState[Either[Failure, A]]): PhonebookT[A] = 
     EitherT[PhonebookState, Failure, A](st)
 
-  val initial = (0, HashMap[Name, Information]())
+  val initial = (0, HashMap[String, String]())
   
   println(
     bulkExecute(

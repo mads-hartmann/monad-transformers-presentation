@@ -1,11 +1,11 @@
 package com.sidewayscoding
 
+import scala.collection.immutable.{ HashMap }
+
 abstract class Maybe[A] {
 
   def map[B](f: A => B): Maybe[B]
-
   def flatMap[B](f: A => Maybe[B]): Maybe[B]
-
   def getOrElse(default: A): A
 
 }
@@ -13,9 +13,7 @@ abstract class Maybe[A] {
 case class Success[A](private val value: A) extends Maybe[A] {
 
   def map[B](f: A => B) = Success(f(this.value))
-
   def flatMap[B](f: A => Maybe[B]) = f(this.value)
-
   def getOrElse(default: A) = this.value
 
 }
@@ -23,64 +21,45 @@ case class Success[A](private val value: A) extends Maybe[A] {
 case class Fail[A] extends Maybe[A] {
 
   def map[B](f: A => B) = Fail[B]()
-
   def flatMap[B](f: A => Maybe[B]) = Fail[B]()
-
   def getOrElse(default: A) = default
 
 }
-/*
 
-import com.sidewayscoding._
-
-for { 
-  a <- Success(10) 
-  b <- Fail[Int]() 
-} yield a + b
-
-Success(10).flatMap( a => Fail[Int].map( b => a+b )) 
-
-Success(10).flatMap( a => Fail[Int].map( b => a+b )).getOrElse(42)
-
-for { 
-  a <- Success(10)
-  b <- Success(20) 
-} yield a + b
-
-Success(10).flatMap( a => Success(20).map( b => a+b )) 
-
-Success(10).flatMap( a => Success(20).map( b => a+b )).getOrElse(42)
-*/
-
-object OptionExample extends App {
+object PhonebookOptionApp extends App {
   
-  import scala.collection.immutable.{ HashMap }
+  import PhonebookData._
+  
+  type Storage = HashMap[String,String]
 
-  // Using Option here rather than Maybe because 
-  // I don't want to implement my own map implementation
+  def execute(cmd: Command, storage: Storage): Option[(Storage,String)] = cmd match {
 
-  val people = HashMap(
-    ("Douglas Adams" -> 0), 
-    ("Akira Toriyama" -> 1)
-  )
+    case Add(name, info) => Some(storage + (name -> info), "Added new record: %s".format(name))
+    case Remove(name)    => Some(storage - name, "Removed record: %s".format(name))
+    case Lookup(name)    => storage.get(name)
+                                   .map( info => (storage,"Information for %s: %s".format(name, info)))
+  }
 
-  val awesomeness = HashMap(
-    (0 -> 42),
-    (1 -> 9001)
-  )
+  // 
+  // Example usage
+  // 
 
-  val howAwesomeIsDouglas = for {
-    id <- people.get("Douglas Adams")
-    awesomeScore <- awesomeness.get(id)
-  } yield awesomeScore
+  val initialStorage = HashMap[String,String]()
 
-  val howAwesomeIsMads = for {
-    id <- people.get("Mads Hartmann")
-    awesomeScore <- awesomeness.get(id)
-  } yield awesomeScore
+  val rslt1 = for {
+    tup1 <- execute(Add("mads","DIKU"), initialStorage)
+    tup2 <- execute(Lookup("mads"), tup1._1)
+  } yield List(tup1._2, tup2._2).mkString("\n")
 
-  println("Douglas has an awesomeness factor of: %s".format( howAwesomeIsDouglas.getOrElse("N/A") ))
-  println("Mads has an awesomeness factor of: %s".format( howAwesomeIsMads.getOrElse("N/A") ))
+  val rslt2 = for {
+    tup1 <- execute(Add("mads","DIKU"), initialStorage)
+    tup2 <- execute(Lookup("mads"), tup1._1)
+    tup3 <- execute(Remove("mads"), tup2._1)
+    tup4 <- execute(Lookup("mads"), tup3._1)
+  } yield List(tup1._2, tup2._2, tup3._2, tup4._2).mkString("\n")
+
+  println("rslt1:\n" + rslt1.getOrElse("failed ;-("))
+  println("rslt2:\n" + rslt2.getOrElse("failed ;-("))
 
 }
 
