@@ -14,8 +14,6 @@ import scala.collection.immutable.{ HashMap }
 // I've chosen to model a phonebook because it's simple
 // but still needs to deal with state and failures, the
 // two things I've focused on in my presentation. 
-// 
-// 
 
 object Phonebook extends App {
 
@@ -31,45 +29,26 @@ object Phonebook extends App {
   // We want some error handling
   type PhonebookT[A] = EitherT[PhonebookState, Failure, A]
 
-  def executeCommand(cmd: Command): PhonebookT[String] = liftStateTtoEitherT(cmd match {
+  def execute(cmd: Command): PhonebookT[String] = liftStateTtoEitherT(cmd match {
 
     case Lookup(name) => for {
         s         <- tick()
-        (_, book) =  s
-        rslt      =  book.get(name).map( Right(_) ).getOrElse(Left("Not Found in phonebook"))
+        (cnt, book) =  s
+        rslt      =  book.get(name).map( x => Right("information for mads: " + x) )
+                                   .getOrElse(Left("Failure executing command %d: Not Found in phonebook".format(cnt)))
       } yield rslt
 
     case Remove(name) => for {
-        s          <- tick()
-        (cnt,book) =  s
-        rslt        <- if (book.contains(name)) {
-          put((cnt, book - name)).map(_ => Right("Successfully added %s to the book".format(name)))
-        } else {
-          init[Storage].map( _ => Left("Command %d failed: Can't remove %s from the book as no such record exists".format(cnt, name)))
-        }
-      } yield rslt
+        _          <- tick()
+        rslt       <- modify { (s: Storage) => (s._1, s._2 - name)}
+      } yield Right("Successfully removed %s to the book".format(name))
 
     case Add(name, information) => for {
-      s           <- tick()
-      (cnt, book) =  s
-      rslt        <- if (book.contains(name)) {
-        init[Storage].map( _ => Left("Command %d failed as %s is already in the book".format(cnt, name)))
-      } else {
-        put((cnt, book.updated(name, information))).map(_ => Right("Successfully added %s to the book".format(name)))
-      }
-    } yield rslt
+      s     <- tick()
+      rslt  <- modify { (s: Storage) => (s._1, s._2 + (name -> information)) }
+    } yield Right("Successfully added %s to the book".format(name))
 
   })
-
-  def bulkExecute(cmds: List[Command]): PhonebookT[String] = cmds match {
-    case Nil => liftStateTtoEitherT(for {
-      s        <- init[Storage]
-      (cnt, _) = s
-      rslt     = Right("Successfully Executed All %d Commands".format(cnt))
-    } yield rslt)
-
-    case x :: xs => executeCommand(x) flatMap { _ => bulkExecute(xs) }
-  }
 
   def tick(): PhonebookState[Storage] = for {
     s              <- init[Storage]
@@ -82,22 +61,19 @@ object Phonebook extends App {
 
   val initial = (0, HashMap[String, String]())
   
-  println(
-    bulkExecute(
-      List(
-        Add("mads","21"),
-        Lookup("mads")
-      )
-    ).run.eval(initial)
-  )
+  val rslt1 = for {
+    msg1 <- execute(Add("mads","21"))
+    msg2 <- execute(Lookup("mads"))
+  } yield List(msg1, msg2).mkString("\n")
 
-  println(
-    bulkExecute(
-      List(
-        Remove("mads")
-      )
-    ).run.eval(initial)
-  )
+  println("rslt1:\n" + rslt1.run.eval(initial))
+
+  val rslt2 = for {
+    msg2 <- execute(Lookup("mads"))
+    msg3 <- execute(Add("mads","21"))
+  } yield List(msg1, msg2, msg3).mkString("\n")
+
+  println("rslt2:\n" + rslt2.run.eval(initial))
 
 }
 
