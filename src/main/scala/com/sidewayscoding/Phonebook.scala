@@ -49,15 +49,21 @@ object Phonebook extends App {
     case Remove(name) => for {
         s          <- tick()
         (cnt,book) =  s
-        _          <- put( (cnt, book - name) )
-        rslt       =  Right("Successfully removed " + name)
+        rslt        <- if (book.contains(name)) {
+          put((cnt, book - name)).map(_ => Right("Successfully added %s to the book".format(name)))
+        } else {
+          init[Storage].map( _ => Left("Command %d failed: Can't remove %s from the book as no such record exists".format(cnt, name)))
+        }
       } yield rslt
 
     case Add(name, information) => for {
       s           <- tick()
       (cnt, book) =  s
-      _           <- put( (cnt, book.updated(name, information)) )
-      rslt        =  Right("Successfully added a person " + name)
+      rslt        <- if (book.contains(name)) {
+        init[Storage].map( _ => Left("Command %d failed as %s is already in the book".format(cnt, name)))
+      } else {
+        put((cnt, book.updated(name, information))).map(_ => Right("Successfully added %s to the book".format(name)))
+      }
     } yield rslt
 
   })
@@ -81,9 +87,7 @@ object Phonebook extends App {
   def liftStateTtoEitherT[A](st: PhonebookState[Either[Failure, A]]): PhonebookT[A] = 
     EitherT[PhonebookState, Failure, A](st)
 
-  println(executeCommand(Lookup("mads")).run.eval(
-    (0, HashMap[Name, Information](("mads" -> "21")))
-  ))
+  val initial = (0, HashMap[Name, Information]())
   
   println(
     bulkExecute(
@@ -91,9 +95,15 @@ object Phonebook extends App {
         Add("mads","21"),
         Lookup("mads")
       )
-    ).run.eval(
-      (0, HashMap[Name, Information]())
-    )
+    ).run.eval(initial)
+  )
+
+  println(
+    bulkExecute(
+      List(
+        Remove("mads")
+      )
+    ).run.eval(initial)
   )
 
 }
